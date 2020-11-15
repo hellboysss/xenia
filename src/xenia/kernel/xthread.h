@@ -110,6 +110,11 @@ class XThread : public XObject, public cpu::Thread {
 
   static constexpr uint32_t kStackAddressRangeBegin = 0x70000000;
   static constexpr uint32_t kStackAddressRangeEnd = 0x7F000000;
+  /* [To confirm] Kernel stack location is based on thread stack location
+  and analysis of how games (and where) allocates memory, however it
+  might not represent console behaviour */
+  static constexpr uint32_t kKernelStackAddressRangeBegin = 0x30000000;
+  static constexpr uint32_t kKernelStackAddressRangeEnd = 0x3F000000;
 
   struct CreationParams {
     uint32_t stack_size;

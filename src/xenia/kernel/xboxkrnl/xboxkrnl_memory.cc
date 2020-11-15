@@ -15,6 +15,7 @@
 #include "xenia/kernel/kernel_state.h"
 #include "xenia/kernel/util/shim_utils.h"
 #include "xenia/kernel/xboxkrnl/xboxkrnl_private.h"
+#include "xenia/kernel/xthread.h"
 #include "xenia/xbox.h"
 
 namespace xe {
@@ -600,18 +601,21 @@ dword_result_t MmCreateKernelStack(dword_t stack_size, dword_t r4) {
 
   uint32_t stack_address;
   kernel_memory()
-      ->LookupHeap(0x70000000)
-      ->AllocRange(0x70000000, 0x7F000000, stack_size_aligned, stack_alignment,
-                   kMemoryAllocationReserve | kMemoryAllocationCommit,
-                   kMemoryProtectRead | kMemoryProtectWrite, false,
-                   &stack_address);
+      ->LookupHeap(XThread::kKernelStackAddressRangeBegin)
+      ->AllocRange(
+          XThread::kKernelStackAddressRangeBegin,
+          XThread::kKernelStackAddressRangeEnd, stack_size_aligned,
+          stack_alignment, kMemoryAllocationReserve | kMemoryAllocationCommit,
+          kMemoryProtectRead | kMemoryProtectWrite, false, &stack_address);
   return stack_address + stack_size;
 }
 DECLARE_XBOXKRNL_EXPORT1(MmCreateKernelStack, kMemory, kImplemented);
 
 dword_result_t MmDeleteKernelStack(lpvoid_t stack_base, lpvoid_t stack_end) {
   // Release the stack (where stack_end is the low address)
-  if (kernel_memory()->LookupHeap(0x70000000)->Release(stack_end)) {
+  if (kernel_memory()
+          ->LookupHeap(XThread::kKernelStackAddressRangeBegin)
+          ->Release(stack_end)) {
     return X_STATUS_SUCCESS;
   }
 

@@ -78,11 +78,13 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, void* buffer,
     return result;
   } else if (overlapped_ptr) {
     assert_true(!items_returned);
-    kernel_state()->CompleteOverlappedImmediateEx(
-        overlapped_ptr,
-        result == X_ERROR_SUCCESS ? X_ERROR_SUCCESS : X_ERROR_FUNCTION_FAILED,
-        X_HRESULT_FROM_WIN32(result),
-        result == X_ERROR_SUCCESS ? item_count : 0);
+    auto run = [result, item_count](uint32_t& extended_error,
+                                    uint32_t& length) -> X_RESULT {
+      extended_error = X_HRESULT_FROM_WIN32(result);
+      length = item_count;
+      return result;
+    };
+    kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
     return X_ERROR_IO_PENDING;
   } else {
     assert_always();

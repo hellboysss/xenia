@@ -537,6 +537,53 @@ void XThread::Execute() {
   Exit(exit_code);
 }
 
+void XThread::FiberProc(void* parameter) {
+  auto data = static_cast<XThread::fiber_data*>(parameter);
+  auto thread = data->thread;
+  auto exit_code =
+      static_cast<int>(thread->kernel_state()->processor()->ExecuteRawUnscoped(
+          thread->thread_state_, data->code_ptr));
+}
+
+void XThread::SetGuestContext(uint32_t context_ptr, uint32_t code_ptr) {
+#ifdef XE_PLATFORM_WIN32
+  if (context_ptr == context_ptr_) {
+    return;
+  }
+  context_ptr_ = context_ptr;
+
+  if (!is_fiber_) {
+    ConvertThreadToFiber(nullptr);
+    is_fiber_ = true;
+  }
+
+  auto it = context_fibers_.find(context_ptr);
+  if (it != context_fibers_.end()) {
+    auto& other_data = (*it).second;
+    if (other_data.code_ptr == code_ptr) {
+      SwitchToFiber(other_data.fiber);
+      return;
+    }
+    // TODO(gibbed): this is probably bad???
+    XELOGW("Context fiber mismatch - {:X} vs {:X}, PROBABLY EXPLODING",
+           code_ptr, other_data.code_ptr);
+    DeleteFiber(other_data.fiber);
+    context_fibers_.erase(it);
+  }
+
+  auto data =
+      &(context_fibers_
+            .emplace(std::make_pair(
+                context_ptr, fiber_data{context_ptr, code_ptr, nullptr, this}))
+            .first->second);
+  data->fiber = CreateFiber(0, FiberProc, data);
+  assert_not_zero(data->fiber);
+  SwitchToFiber(data->fiber);
+#else
+  // TODO(gibbed): EXPLOSIONS
+#endif
+}
+
 void XThread::EnterCriticalRegion() {
   xe::global_critical_region::mutex().lock();
 }

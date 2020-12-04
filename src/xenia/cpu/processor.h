@@ -116,6 +116,7 @@ class Processor {
 
   bool Execute(ThreadState* thread_state, uint32_t address);
   bool ExecuteRaw(ThreadState* thread_state, uint32_t address);
+  bool ExecuteRawUnscoped(ThreadState* thread_state, uint32_t address);
   uint64_t Execute(ThreadState* thread_state, uint32_t address, uint64_t args[],
                    size_t arg_count);
   uint64_t ExecuteInterrupt(ThreadState* thread_state, uint32_t address,

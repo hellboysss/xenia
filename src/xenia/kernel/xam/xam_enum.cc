@@ -32,50 +32,44 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, void* buffer,
                         uint32_t overlapped_ptr) {
   assert_true(flags == 0);
 
-  auto e = kernel_state()->object_table()->LookupObject<XEnumerator>(handle);
-  if (!e) {
-    if (overlapped_ptr) {
-      kernel_state()->CompleteOverlappedImmediateEx(
-          overlapped_ptr, X_ERROR_INVALID_HANDLE, X_ERROR_INVALID_HANDLE, 0);
-      return X_ERROR_IO_PENDING;
-    } else {
-      return X_ERROR_INVALID_HANDLE;
-    }
-  }
-
-  size_t actual_buffer_length = buffer_length;
-  if (buffer_length == e->items_per_enumerate()) {
-    actual_buffer_length = e->item_size() * e->items_per_enumerate();
-    // Known culprits:
-    //   Final Fight: Double Impact (saves)
-    XELOGW(
-        "Broken usage of XamEnumerate! buffer length={:X} vs actual "
-        "length={:X} "
-        "(item size={:X}, items per enumerate={})",
-        (uint32_t)buffer_length, actual_buffer_length, e->item_size(),
-        e->items_per_enumerate());
-  }
-
-  std::memset(buffer, 0, actual_buffer_length);
-
   X_RESULT result;
   uint32_t item_count = 0;
 
-  if (actual_buffer_length < e->item_size()) {
-    result = X_ERROR_INSUFFICIENT_BUFFER;
-  } else if (e->current_item() >= e->item_count()) {
-    result = X_ERROR_NO_MORE_FILES;
+  auto e = kernel_state()->object_table()->LookupObject<XEnumerator>(handle);
+  if (!e) {
+    result = X_ERROR_INVALID_HANDLE;
   } else {
-    auto item_buffer = static_cast<uint8_t*>(buffer);
-    auto max_items = actual_buffer_length / e->item_size();
-    while (max_items--) {
-      if (!e->WriteItem(item_buffer)) {
-        break;
-      }
-      item_buffer += e->item_size();
-      item_count++;
+    size_t actual_buffer_length = buffer_length;
+    if (buffer_length == e->items_per_enumerate()) {
+      actual_buffer_length = e->item_size() * e->items_per_enumerate();
+      // Known culprits:
+      //   Final Fight: Double Impact (saves)
+      XELOGW(
+          "Broken usage of XamEnumerate! buffer length={:X} vs actual "
+          "length={:X} "
+          "(item size={:X}, items per enumerate={})",
+          (uint32_t)buffer_length, actual_buffer_length, e->item_size(),
+          e->items_per_enumerate());
     }
-    result = X_ERROR_SUCCESS;
+
+    std::memset(buffer, 0, actual_buffer_length);
+
+    if (actual_buffer_length < e->item_size()) {
+      result = X_ERROR_INSUFFICIENT_BUFFER;
+    } else if (e->current_item() >= e->item_count()) {
+      result = X_ERROR_NO_MORE_FILES;
+    } else {
+      auto item_buffer = static_cast<uint8_t*>(buffer);
+      auto max_items = actual_buffer_length / e->item_size();
+      while (max_items--) {
+        if (!e->WriteItem(item_buffer)) {
+          break;
+        }
+        item_buffer += e->item_size();
+        item_count++;
+      }
+      result = X_ERROR_SUCCESS;
+    }
   }
 
   if (items_returned) {
@@ -84,11 +78,13 @@ uint32_t xeXamEnumerate(uint32_t handle, uint32_t flags, void* buffer,
     return result;
   } else if (overlapped_ptr) {
     assert_true(!items_returned);
-    kernel_state()->CompleteOverlappedImmediateEx(
-        overlapped_ptr,
-        result == X_ERROR_SUCCESS ? X_ERROR_SUCCESS : X_ERROR_FUNCTION_FAILED,
-        X_HRESULT_FROM_WIN32(result),
-        result == X_ERROR_SUCCESS ? item_count : 0);
+    auto run = [result, item_count](uint32_t& extended_error,
+                                    uint32_t& length) -> X_RESULT {
+      extended_error = X_HRESULT_FROM_WIN32(result);
+      length = item_count;
+      return result;
+    };
+    kernel_state()->CompleteOverlappedDeferredEx(run, overlapped_ptr);
     return X_ERROR_IO_PENDING;
   } else {
     assert_always();

@@ -362,6 +362,20 @@ bool Processor::ExecuteRaw(ThreadState* thread_state, uint32_t address) {
   return function->Call(thread_state, 0xBCBCBCBC);
 }
 
+bool Processor::ExecuteRawUnscoped(ThreadState* thread_state,
+                                   uint32_t address) {
+  // Attempt to get the function.
+  auto function = ResolveFunction(address);
+  if (!function) {
+    // Symbol not found in any module.
+    XELOGCPU("Execute({:08X}): failed to find function", address);
+    return false;
+  }
+
+  auto context = thread_state->context();
+  return function->Call(thread_state, 0xBCBCBCBC);
+}
+
 uint64_t Processor::Execute(ThreadState* thread_state, uint32_t address,
                             uint64_t args[], size_t arg_count) {
   SCOPE_profile_cpu_f("cpu");
